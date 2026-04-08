@@ -62,7 +62,7 @@ function getMockData(service: string): ServiceData {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 260,
-    height: 400,
+    height: 360,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
