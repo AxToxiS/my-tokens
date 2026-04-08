@@ -1,6 +1,9 @@
 import { app, BrowserWindow, ipcMain, session } from 'electron'
 import path from 'path'
 
+// Fix cookie persistence — set explicit userData before app is ready
+app.setPath('userData', path.join(app.getPath('appData'), 'my-tokens-scraper'))
+
 // ============ TEST MODE ============
 const USE_MOCK = false // Set to true for testing with fake data
 // ===================================
@@ -89,8 +92,8 @@ function createWindow() {
 
 function createScraperWindow(service: string, url: string): BrowserWindow {
   const win = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1280,
+    height: 800,
     show: false,
     webPreferences: {
       contextIsolation: true,
@@ -98,6 +101,9 @@ function createScraperWindow(service: string, url: string): BrowserWindow {
       partition: 'persist:scraper',
     },
   })
+  win.webContents.setUserAgent(
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+  )
   win.loadURL(url)
   return win
 }
@@ -110,44 +116,76 @@ async function waitForLoad(win: BrowserWindow, timeoutMs = 15000): Promise<void>
   })
 }
 
+// Poll DOM until expected text appears (for SPAs that render after did-finish-load)
+async function waitForContent(win: BrowserWindow, needle: string, timeoutMs = 12000): Promise<boolean> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const found: boolean = await win.webContents.executeJavaScript(
+        `document.body && document.body.innerText.includes(${JSON.stringify(needle)})`
+      )
+      if (found) return true
+    } catch { /* window may be navigating */ }
+    await new Promise((r) => setTimeout(r, 600))
+  }
+  return false
+}
+
+const SERVICE_CONTENT_MARKER: Record<string, string> = {
+  openai: 'restante',
+  claude: 'usado',
+  github: 'Premium requests',
+  windsurf: 'Total credits used',
+}
+
 async function scrapeService(service: string): Promise<ServiceData | null> {
   const url = SERVICE_URLS[service]
   if (!url) return null
 
+  // Prevent concurrent scrapes of the same service
+  if (loadingInProgress.has(service)) {
+    log(`${service}: scrape already in progress, skipping`)
+    return null
+  }
+  loadingInProgress.add(service)
+
   try {
     let win = scraperWindows.get(service)
-    const needsFullLoad = !win || win.isDestroyed()
-
-    if (needsFullLoad) {
-      // Prevent concurrent full loads of the same service
-      if (loadingInProgress.has(service)) {
-        log(`${service}: full load already in progress, skipping`)
-        return null
-      }
-      loadingInProgress.add(service)
-      try {
-        win = createScraperWindow(service, url)
-        scraperWindows.set(service, win)
-        await waitForLoad(win)
-        await new Promise((r) => setTimeout(r, 3000))
-
-        const finalUrl = win.webContents.getURL()
-        log(`${service}: target=${url}, landed=${finalUrl}`)
-
-        if (!finalUrl.includes(new URL(url).pathname)) {
-          log(`${service}: redirected, retrying navigation to ${url}`)
-          win.loadURL(url)
-          await waitForLoad(win)
-          await new Promise((r) => setTimeout(r, 3000))
-          log(`${service}: retry landed=${win.webContents.getURL()}`)
-        }
-      } finally {
-        loadingInProgress.delete(service)
-      }
+    if (!win || win.isDestroyed()) {
+      win = createScraperWindow(service, url)
+      scraperWindows.set(service, win)
     }
 
-    // Re-run extraction script — instant when window already loaded
-    const data = await win!.webContents.executeJavaScript(
+    // For SPAs: load home first then navigate internally
+    const marker = SERVICE_CONTENT_MARKER[service]
+    if (service === 'claude') {
+      win.loadURL('https://claude.ai/settings/usage')
+      await waitForLoad(win)
+      // Wait for SPA to hydrate, then click the Usage link if present
+      await new Promise((r) => setTimeout(r, 3000))
+      await win.webContents.executeJavaScript(`
+        (function() {
+          var links = Array.from(document.querySelectorAll('a[href*="usage"], a[href*="Usage"]'));
+          if (links.length > 0) { links[0].click(); }
+        })()
+      `).catch(() => {})
+      await new Promise((r) => setTimeout(r, 3000))
+    } else if (service === 'windsurf') {
+      win.loadURL('https://windsurf.com/profile')
+      await waitForLoad(win)
+      await new Promise((r) => setTimeout(r, 5000))
+    } else {
+      win.loadURL(url)
+      await waitForLoad(win)
+    }
+    if (marker) {
+      const found = await waitForContent(win, marker)
+      log(`${service}: content marker "${marker}" found=${found}, url=${win.webContents.getURL()}`)
+    } else {
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+
+    const data = await win.webContents.executeJavaScript(
       getScraperScript(service)
     )
 
@@ -163,6 +201,8 @@ async function scrapeService(service: string): Promise<ServiceData | null> {
       lastUpdated: Date.now(),
       error: error.message || 'Unknown error',
     }
+  } finally {
+    loadingInProgress.delete(service)
   }
 }
 
@@ -345,23 +385,34 @@ ipcMain.handle('scrape-all-services', async () => {
   return results
 })
 
-ipcMain.handle('open-service-login', async (_event, service: string) => {
-  const url = SERVICE_URLS[service]
-  if (!url) return
+const LOGIN_URLS: Record<string, string> = {
+  openai: 'https://chatgpt.com',
+  claude: 'https://claude.ai',
+  github: 'https://github.com/login',
+  windsurf: 'https://windsurf.com/login',
+}
 
-  log(`Opening login window for ${service}: ${url}`)
+ipcMain.handle('open-service-login', async (_event, service: string) => {
+  const loginUrl = LOGIN_URLS[service] || SERVICE_URLS[service]
+  if (!loginUrl) return
+
+  log(`Opening login window for ${service}: ${loginUrl}`)
 
   // Always create a fresh login window (separate from scraper windows)
   const loginWin = new BrowserWindow({
-    width: 900,
-    height: 700,
+    width: 1000,
+    height: 750,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       partition: 'persist:scraper',
     },
   })
-  loginWin.loadURL(url)
+  loginWin.webContents.setUserAgent(
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+  )
+  loginWin.loadURL(loginUrl)
+  loginWin.show()
 
   // When the user closes the login window, remove old scraper and notify renderer
   loginWin.once('closed', () => {
@@ -379,6 +430,35 @@ ipcMain.handle('open-service-login', async (_event, service: string) => {
   })
 })
 
+ipcMain.handle('logout-service', async (_event, service: string) => {
+  log(`Logging out service: ${service}`)
+  const domains: Record<string, string> = {
+    openai: 'chatgpt.com',
+    claude: 'claude.ai',
+    github: 'github.com',
+    windsurf: 'windsurf.com',
+  }
+  const domain = domains[service]
+  if (domain) {
+    const ses = session.fromPartition('persist:scraper')
+    await ses.clearStorageData({
+      origin: `https://${domain}`,
+      storages: ['cookies', 'localstorage', 'sessionstorage', 'indexdb', 'websql', 'cachestorage'],
+    }).catch(() => {})
+    // Also remove cookies by domain directly
+    const cookies = await ses.cookies.get({ domain })
+    for (const cookie of cookies) {
+      const url = `https://${cookie.domain?.replace(/^\./, '')}${cookie.path || '/'}`
+      await ses.cookies.remove(url, cookie.name).catch(() => {})
+    }
+  }
+  // Destroy scraper window so next scrape starts fresh
+  const win = scraperWindows.get(service)
+  if (win && !win.isDestroyed()) win.close()
+  scraperWindows.delete(service)
+  log(`Logout complete for ${service}`)
+})
+
 ipcMain.on('minimize-window', () => {
   mainWindow?.minimize()
 })
@@ -394,22 +474,30 @@ ipcMain.on('resize-window', (_event, height: number) => {
   }
 })
 
+ipcMain.on('set-opacity', (_event, opacity: number) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setOpacity(Math.max(0.1, Math.min(1.0, opacity)))
+  }
+})
+
 function startAutoRefresh() {
-  const INTERVAL = 5000
-  for (const service of Object.keys(SERVICE_URLS)) {
-    // Stagger start so they don't all hammer at once
-    const delay = Object.keys(SERVICE_URLS).indexOf(service) * 500
-    setTimeout(() => {
-      setInterval(async () => {
+  const INTERVAL = 30_000
+  // Stagger each service so they don't all reload simultaneously
+  Object.keys(SERVICE_URLS).forEach((service, idx) => {
+    setTimeout(async () => {
+      // First tick immediately after stagger
+      const run = async () => {
         if (!mainWindow || mainWindow.isDestroyed()) return
         log(`Auto-refresh: ${service}`)
         const result = await scrapeService(service)
         if (result && mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('service-data-update', result)
         }
-      }, INTERVAL)
-    }, delay)
-  }
+      }
+      await run()
+      setInterval(run, INTERVAL)
+    }, idx * 2000) // stagger 2s apart so not all reload at once
+  })
 }
 
 app.whenReady().then(async () => {
@@ -419,7 +507,7 @@ app.whenReady().then(async () => {
   await Promise.all(Object.keys(SERVICE_URLS).map(async (service) => {
     const result = await scrapeService(service)
     if (result && mainWindow && !mainWindow.isDestroyed()) {
-      log(`Push initial data for ${service}`)
+      log(`Push initial data for ${service}:`, result)
       mainWindow.webContents.send('service-data-update', result)
     }
   }))

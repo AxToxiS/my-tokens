@@ -5,13 +5,13 @@ interface Window {
     scrapeService: (service: string) => Promise<ServiceData | null>
     scrapeAllServices: () => Promise<Record<string, ServiceData | null>>
     openServiceLogin: (service: string) => Promise<void>
+    logoutService: (service: string) => Promise<void>
     onServiceLoginClosed: (callback: (service: string) => void) => void
     onServiceDataUpdate: (callback: (data: ServiceData) => void) => void
-    getSettings: () => Promise<AppSettings>
-    saveSettings: (settings: AppSettings) => Promise<void>
     minimizeWindow: () => void
     closeWindow: () => void
     resizeWindow: (height: number) => void
+    setOpacity: (opacity: number) => void
   }
 }
 

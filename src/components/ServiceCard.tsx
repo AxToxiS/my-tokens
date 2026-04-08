@@ -7,6 +7,7 @@ interface ServiceCardProps {
   isLoading: boolean
   onLogin: () => void
   onRefresh: () => void
+  onLogout: () => void
 }
 
 const SERVICE_CONFIG: Record<string, { name: string; color: string; icon: string }> = {
@@ -103,6 +104,7 @@ export default function ServiceCard({
   isLoading,
   onLogin,
   onRefresh,
+  onLogout,
 }: ServiceCardProps) {
   const config = SERVICE_CONFIG[service] || { name: service, color: '#71717a', icon: '○' }
   const hasError = data?.error
@@ -128,14 +130,25 @@ export default function ServiceCard({
           )}
         </div>
         <div className="flex items-center gap-0.5">
-          {needsLogin && (
+          {needsLogin ? (
             <button
               onClick={onLogin}
               className="text-[8px] px-1.5 py-0 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300 transition-colors"
             >
               Login
             </button>
-          )}
+          ) : data && !hasError ? (
+            <button
+              onClick={onLogout}
+              title="Cerrar sesión"
+              className="w-4 h-4 rounded flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-zinc-700 transition-colors"
+            >
+              <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                <path d="M6.5 3.5V2a.5.5 0 00-.5-.5H2A.5.5 0 001.5 2v6a.5.5 0 00.5.5h4a.5.5 0 00.5-.5V6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                <path d="M5 5h3.5M7 3.5L8.5 5 7 6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          ) : null}
         </div>
       </div>
 

@@ -1,6 +1,11 @@
 import { useState } from 'react'
 
-export default function TitleBar() {
+interface TitleBarProps {
+  settingsOpen: boolean
+  onSettingsToggle: () => void
+}
+
+export default function TitleBar({ settingsOpen, onSettingsToggle }: TitleBarProps) {
   const [isHovered, setIsHovered] = useState<string | null>(null)
 
   return (
@@ -18,6 +23,31 @@ export default function TitleBar() {
         className="flex items-center gap-1"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
+        {/* Settings */}
+        <button
+          onClick={onSettingsToggle}
+          onMouseEnter={() => setIsHovered('settings')}
+          onMouseLeave={() => setIsHovered(null)}
+          className={`w-4 h-4 rounded flex items-center justify-center transition-colors ${
+            settingsOpen || isHovered === 'settings' ? 'bg-zinc-700' : 'bg-transparent'
+          }`}
+          title="Ajustes"
+        >
+          <svg width="9" height="9" viewBox="0 0 14 14" fill="none">
+            <path
+              d="M7 9a2 2 0 100-4 2 2 0 000 4z"
+              stroke={settingsOpen ? '#c084fc' : '#a1a1aa'}
+              strokeWidth="1.4"
+            />
+            <path
+              d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.93 2.93l1.06 1.06M10.01 10.01l1.06 1.06M2.93 11.07l1.06-1.06M10.01 3.99l1.06-1.06"
+              stroke={settingsOpen ? '#c084fc' : '#a1a1aa'}
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        {/* Minimize */}
         <button
           onClick={() => window.electronAPI.minimizeWindow()}
           onMouseEnter={() => setIsHovered('min')}
@@ -30,6 +60,7 @@ export default function TitleBar() {
             <rect width="10" height="1" rx="0.5" fill="#a1a1aa" />
           </svg>
         </button>
+        {/* Close */}
         <button
           onClick={() => window.electronAPI.closeWindow()}
           onMouseEnter={() => setIsHovered('close')}

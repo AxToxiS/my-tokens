@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scrapeService: (service: string) => ipcRenderer.invoke('scrape-service', service),
   scrapeAllServices: () => ipcRenderer.invoke('scrape-all-services'),
   openServiceLogin: (service: string) => ipcRenderer.invoke('open-service-login', service),
+  logoutService: (service: string) => ipcRenderer.invoke('logout-service', service),
   onServiceLoginClosed: (callback: (service: string) => void) => {
     ipcRenderer.on('service-login-closed', (_event, service) => callback(service))
   },
@@ -13,4 +14,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
   closeWindow: () => ipcRenderer.send('close-window'),
   resizeWindow: (height: number) => ipcRenderer.send('resize-window', height),
+  setOpacity: (opacity: number) => ipcRenderer.send('set-opacity', opacity),
 })
