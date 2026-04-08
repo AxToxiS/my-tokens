@@ -7,6 +7,7 @@ const USE_MOCK = false // Set to true for testing with fake data
 
 let mainWindow: BrowserWindow | null = null
 const scraperWindows: Map<string, BrowserWindow> = new Map()
+const scrapingInProgress: Set<string> = new Set()
 
 const SERVICE_URLS: Record<string, string> = {
   openai: 'https://chatgpt.com/codex/settings/usage',
@@ -60,8 +61,8 @@ function getMockData(service: string): ServiceData {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 380,
-    height: 620,
+    width: 260,
+    height: 400,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -113,6 +114,13 @@ async function scrapeService(service: string): Promise<ServiceData | null> {
   const url = SERVICE_URLS[service]
   if (!url) return null
 
+  // Prevent concurrent scrapes of the same service
+  if (scrapingInProgress.has(service)) {
+    log(`${service}: scrape already in progress, skipping`)
+    return null
+  }
+  scrapingInProgress.add(service)
+
   try {
     let win = scraperWindows.get(service)
     if (!win || win.isDestroyed()) {
@@ -154,6 +162,8 @@ async function scrapeService(service: string): Promise<ServiceData | null> {
       lastUpdated: Date.now(),
       error: error.message || 'Unknown error',
     }
+  } finally {
+    scrapingInProgress.delete(service)
   }
 }
 
@@ -175,6 +185,85 @@ const SHARED_SCRAPER_UTILS = `
   }
   function safeText() { return document.body ? document.body.innerText : ''; }
 `;
+
+function getClaudeScript(): string {
+  // Find ALL "X% usado" or "X% used" occurrences.
+  // Claude page has exactly 2: first = session (5h), second = weekly
+  const code = [
+    '(function() {',
+    '  try {',
+    '    var t = document.body ? document.body.innerText : "";',
+    '    var result = { pageTitle: document.title, bodyPreview: t.substring(0, 5000) };',
+    '',
+    '    var re = /(\\d+\\.?\\d*)\\s*%\\s*(?:usado|used)/gi;',
+    '    var matches = [];',
+    '    var m;',
+    '    while ((m = re.exec(t)) !== null) { matches.push(parseFloat(m[1])); }',
+    '',
+    '    if (matches.length >= 1) { result.fiveHourUsage = 100 - matches[0]; result.fiveHourLimit = 100; }',
+    '    if (matches.length >= 2) { result.weeklyUsage = 100 - matches[1]; result.weeklyLimit = 100; }',
+    '',
+    '    result.debugMatches = matches;',
+    '    return result;',
+    '  } catch(e) { return { error: e.message, pageTitle: document.title }; }',
+    '})()',
+  ]
+  return code.join('\n')
+}
+
+function getGithubScript(): string {
+  const code = [
+    '(function() {',
+    '  try {',
+    '    var t = document.body ? document.body.innerText : "";',
+    '    var result = { pageTitle: document.title, bodyPreview: t.substring(0, 3000) };',
+    '',
+    '    var i = t.toLowerCase().indexOf("premium requests");',
+    '    if (i >= 0) {',
+    '      var chunk = t.substring(i, i + 200);',
+    '      var m = chunk.match(/(\\d+\\.?\\d*)\\s*%/);',
+    '      if (m) {',
+    '        result.premiumRequests = 100 - parseFloat(m[1]);',
+    '        result.premiumRequestsLimit = 100;',
+    '      }',
+    '    }',
+    '',
+    '    return result;',
+    '  } catch(e) { return { error: e.message, pageTitle: document.title }; }',
+    '})()',
+  ]
+  return code.join('\n')
+}
+
+function getWindsurfScript(): string {
+  const code = [
+    '(function() {',
+    '  try {',
+    '    var t = document.body ? document.body.innerText : "";',
+    '    var result = { pageTitle: document.title, bodyPreview: t.substring(0, 3000) };',
+    '',
+    '    var ci = t.indexOf("Total credits used");',
+    '    if (ci >= 0) {',
+    '      var after = t.substring(ci + 18, ci + 80);',
+    '      var m = after.match(/(\\d[\\d,]*)/);',
+    '      if (m) result.creditsUsed = parseInt(m[1].replace(/,/g, ""));',
+    '    }',
+    '',
+    '    var li = t.indexOf("lines written by");',
+    '    if (li >= 0) {',
+    '      var before = t.substring(Math.max(0, li - 40), li);',
+    '      var m2 = before.match(/(\\d[\\d.,]*)/g);',
+    '      if (m2 && m2.length > 0) {',
+    '        result.linesWritten = parseInt(m2[m2.length - 1].replace(/[.,]/g, ""));',
+    '      }',
+    '    }',
+    '',
+    '    return result;',
+    '  } catch(e) { return { error: e.message, pageTitle: document.title }; }',
+    '})()',
+  ]
+  return code.join('\n')
+}
 
 function getScraperScript(service: string): string {
   switch (service) {
@@ -213,115 +302,17 @@ function getScraperScript(service: string): string {
 
     case 'claude':
       // claude.ai/settings/usage
-      // Real DOM: "Sesión actual" → "0% usado", "Todos los modelos" → "15% usado"
-      return `
-        (function() {
-          ${SHARED_SCRAPER_UTILS}
-          try {
-            var t = safeText();
-            var result = { pageTitle: document.title, bodyPreview: t.substring(0, 5000) };
-
-            // "Sesión actual" section → "X% usado" (current session = 5-hour equivalent)
-            var sessionUsed = null;
-            var sessionMatch = t.match(/[Ss]esi[oó]n actual[\\s\\S]{0,200}?(\\d+\\.?\\d*)\\s*[%％]\\s*usado/i);
-            if (sessionMatch) sessionUsed = parseFloat(sessionMatch[1]);
-            // English fallback
-            if (sessionUsed === null) {
-              var sessionMatchEn = t.match(/[Cc]urrent session[\\s\\S]{0,200}?(\\d+\\.?\\d*)\\s*[%％]\\s*used/i);
-              if (sessionMatchEn) sessionUsed = parseFloat(sessionMatchEn[1]);
-            }
-
-            // "Todos los modelos" or "All models" → "X% usado" (weekly)
-            var weeklyUsed = null;
-            var weeklyMatch = t.match(/[Tt]odos los modelos[\\s\\S]{0,200}?(\\d+\\.?\\d*)\\s*[%％]\\s*usado/i);
-            if (weeklyMatch) weeklyUsed = parseFloat(weeklyMatch[1]);
-            // English fallback
-            if (weeklyUsed === null) {
-              var weeklyMatchEn = t.match(/[Aa]ll models[\\s\\S]{0,200}?(\\d+\\.?\\d*)\\s*[%％]\\s*used/i);
-              if (weeklyMatchEn) weeklyUsed = parseFloat(weeklyMatchEn[1]);
-            }
-
-            // Convert "% usado" → remaining = 100 - used
-            if (sessionUsed !== null) {
-              result.fiveHourUsage = 100 - sessionUsed;
-              result.fiveHourLimit = 100;
-            }
-            if (weeklyUsed !== null) {
-              result.weeklyUsage = 100 - weeklyUsed;
-              result.weeklyLimit = 100;
-            }
-
-            var pcts = t.match(/\\d+\\.?\\d*\\s*[%％]/g) || [];
-            result.rawPercentages = pcts.slice(0, 10);
-            return result;
-          } catch(e) { return { error: e.message, pageTitle: document.title }; }
-        })()
-      `
+      // Real DOM text: "Sesión actual\n\nSe inicia...\n\n0% usado\n\nLímites semanales\n...\nTodos los modelos\n\n...\n\n15% usado"
+      return getClaudeScript()
 
     case 'github':
       // github.com/settings/copilot/features
-      // Real DOM: "Premium requests" → "1.0%" (percentage used)
-      return `
-        (function() {
-          ${SHARED_SCRAPER_UTILS}
-          try {
-            var t = safeText();
-            var result = { pageTitle: document.title, bodyPreview: t.substring(0, 3000) };
-
-            // Look for "Premium requests" followed by a percentage like "1.0%"
-            var premMatch = t.match(/[Pp]remium\\s*requests[\\s\\S]{0,200}?(\\d+\\.?\\d*)\\s*[%％]/i);
-            if (premMatch) {
-              var usedPct = parseFloat(premMatch[1]);
-              // remaining = 100 - used
-              result.premiumRequests = 100 - usedPct;
-              result.premiumRequestsLimit = 100;
-            }
-
-            var pcts = t.match(/\\d+\\.?\\d*\\s*[%％]/g) || [];
-            result.rawPercentages = pcts.slice(0, 10);
-            return result;
-          } catch(e) { return { error: e.message, pageTitle: document.title }; }
-        })()
-      `
+      // Real DOM text: "Premium requests\n1.7%"
+      return getGithubScript()
 
     case 'windsurf':
-      // windsurf.com/profile — Enterprise profile page
-      // Real DOM: "Total credits used\n\n1099" and "Total Cascade conversations\n75"
-      return `
-        (function() {
-          try {
-            var t = document.body ? document.body.innerText : '';
-            var result = { pageTitle: document.title, bodyPreview: t.substring(0, 3000) };
-
-            // Extract "Total credits used" followed by a number
-            var creditsIdx = t.indexOf('Total credits used');
-            if (creditsIdx >= 0) {
-              var after = t.substring(creditsIdx + 18, creditsIdx + 80);
-              var lines = after.split('\\n');
-              for (var i = 0; i < lines.length; i++) {
-                var trimmed = lines[i].trim().replace(/[.,]/g, '');
-                if (trimmed.length > 0 && !isNaN(Number(trimmed))) {
-                  result.creditsUsed = parseInt(trimmed);
-                  break;
-                }
-              }
-            }
-
-            // Extract "lines written by Cascade"
-            var linesIdx = t.indexOf('lines written by');
-            if (linesIdx >= 0) {
-              var before = t.substring(Math.max(0, linesIdx - 30), linesIdx);
-              var parts = before.split('\\n');
-              var lastPart = parts[parts.length - 1].trim().replace(/[.,]/g, '');
-              if (!isNaN(Number(lastPart))) {
-                result.linesWritten = parseInt(lastPart);
-              }
-            }
-
-            return result;
-          } catch(e) { return { error: e.message, pageTitle: document.title }; }
-        })()
-      `
+      // windsurf.com/profile — "Total credits used\n\n1099"
+      return getWindsurfScript()
 
     default:
       return `(function() { return { error: 'Unknown service' } })()`

@@ -3,7 +3,7 @@ import TitleBar from './components/TitleBar'
 import ServiceCard from './components/ServiceCard'
 
 const SERVICES = ['openai', 'claude', 'github', 'windsurf']
-const REFRESH_INTERVAL = 5 * 60 * 1000 // 5 minutes
+const REFRESH_INTERVAL = 5 * 1000 // 5 seconds
 
 export default function App() {
   const [serviceData, setServiceData] = useState<Record<string, ServiceData | null>>({})
@@ -54,11 +54,11 @@ export default function App() {
   }, [refreshAll])
 
   return (
-    <div className="w-full h-screen bg-[#1a1b23] rounded-xl overflow-hidden flex flex-col border border-zinc-800/50">
+    <div className="w-full h-screen bg-[#1a1b23] rounded-lg overflow-hidden flex flex-col border border-zinc-800/50">
       <TitleBar />
 
       {/* Main content */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+      <div className="flex-1 overflow-y-auto p-1 space-y-1">
         {SERVICES.map((service) => (
           <ServiceCard
             key={service}
@@ -72,24 +72,9 @@ export default function App() {
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-1.5 bg-[#1a1b23] border-t border-zinc-800/50 flex items-center justify-between">
-        <button
-          onClick={refreshAll}
-          className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
-        >
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-            <path
-              d="M10 6a4 4 0 1 1-.5-1.9"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              strokeLinecap="round"
-            />
-            <path d="M10 2v2.5H7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Refrescar todo
-        </button>
-        <span className="text-[9px] text-zinc-600">
-          Auto-refresh: 5min
+      <div className="px-2 py-1 bg-[#1a1b23] border-t border-zinc-800/50 flex items-center justify-end">
+        <span className="text-[8px] text-zinc-600">
+          auto-refresh: 5s
         </span>
       </div>
     </div>

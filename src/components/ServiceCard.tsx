@@ -25,24 +25,25 @@ function formatTokens(n: number): string {
 function renderServiceBars(service: string, data: ServiceData, color: string) {
   switch (service) {
     case 'openai':
-    case 'claude':
       return (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {data.fiveHourUsage != null && data.fiveHourLimit != null && (
-            <ProgressBar
-              value={data.fiveHourUsage}
-              max={data.fiveHourLimit}
-              color={color}
-              label="Cuota 5 horas"
-            />
+            <ProgressBar value={data.fiveHourUsage} max={data.fiveHourLimit} color={color} label="5 horas" />
           )}
           {data.weeklyUsage != null && data.weeklyLimit != null && (
-            <ProgressBar
-              value={data.weeklyUsage}
-              max={data.weeklyLimit}
-              color={color}
-              label="Cuota semanal"
-            />
+            <ProgressBar value={data.weeklyUsage} max={data.weeklyLimit} color={color} label="Semanal" />
+          )}
+        </div>
+      )
+
+    case 'claude':
+      return (
+        <div className="space-y-1">
+          {data.fiveHourUsage != null && data.fiveHourLimit != null && (
+            <ProgressBar value={data.fiveHourUsage} max={data.fiveHourLimit} color={color} label="Sesión" />
+          )}
+          {data.weeklyUsage != null && data.weeklyLimit != null && (
+            <ProgressBar value={data.weeklyUsage} max={data.weeklyLimit} color={color} label="Semanal" />
           )}
         </div>
       )
@@ -50,7 +51,7 @@ function renderServiceBars(service: string, data: ServiceData, color: string) {
     case 'github': {
       // GitHub: premiumRequests = remaining % (already 100 - used%)
       return (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {data.premiumRequests != null && data.premiumRequestsLimit != null && (
             <ProgressBar
               value={data.premiumRequests}
@@ -69,20 +70,20 @@ function renderServiceBars(service: string, data: ServiceData, color: string) {
         <div className="space-y-1">
           {data.creditsUsed != null && (
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
-                Créditos usados
+              <span className="text-[8px] text-zinc-500 uppercase tracking-wider">
+                Créditos
               </span>
-              <span className="text-[10px] font-mono text-zinc-300">
+              <span className="text-[8px] font-mono text-zinc-300">
                 {data.creditsUsed.toLocaleString()}
               </span>
             </div>
           )}
           {data.linesWritten != null && (
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
-                Líneas por Cascade
+              <span className="text-[8px] text-zinc-500 uppercase tracking-wider">
+                Líneas Cascade
               </span>
-              <span className="text-[10px] font-mono text-zinc-400">
+              <span className="text-[8px] font-mono text-zinc-400">
                 {data.linesWritten.toLocaleString()}
               </span>
             </div>
@@ -114,70 +115,49 @@ export default function ServiceCard({
   const needsLogin = hasError || hasNoData
 
   return (
-    <div className="bg-[#22232d] rounded-lg p-3 border border-zinc-800/50 hover:border-zinc-700/50 transition-colors">
+    <div className="bg-[#22232d] rounded p-1.5 border border-zinc-800/50 hover:border-zinc-700/50 transition-colors">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span style={{ color: config.color }} className="text-sm">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-1">
+          <span style={{ color: config.color }} className="text-[10px]">
             {config.icon}
           </span>
-          <span className="text-sm font-medium text-zinc-200">{config.name}</span>
+          <span className="text-[10px] font-medium text-zinc-200">{config.name}</span>
           {isLoading && (
-            <div className="w-3 h-3 border border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
+            <div className="w-2 h-2 border border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           {needsLogin && (
             <button
               onClick={onLogin}
-              className="text-[10px] px-2 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300 transition-colors"
+              className="text-[8px] px-1.5 py-0 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300 transition-colors"
             >
               Login
             </button>
           )}
-          <button
-            onClick={onRefresh}
-            className="text-zinc-500 hover:text-zinc-300 transition-colors p-0.5"
-            title="Refrescar"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path
-                d="M10 6a4 4 0 1 1-.5-1.9"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                strokeLinecap="round"
-              />
-              <path d="M10 2v2.5H7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
         </div>
       </div>
 
       {/* Peak indicator for Claude */}
       {service === 'claude' && (
-        <div className="mb-2">
+        <div className="mb-1">
           <PeakIndicator />
         </div>
       )}
 
       {/* Content */}
       {data && !hasError && !hasNoData ? (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {renderServiceBars(service, data, config.color)}
-          <div className="text-[9px] text-zinc-600 text-right">
-            {new Date(data.lastUpdated).toLocaleTimeString()}
-          </div>
         </div>
       ) : data && (hasError || hasNoData) ? (
-        <div className="text-[10px] text-zinc-500 bg-zinc-800/50 rounded p-2 space-y-1">
-          <div>Requiere login — pulsa el botón Login arriba</div>
-          {data.pageTitle && (
-            <div className="text-[9px] text-zinc-600 truncate">Página: {data.pageTitle}</div>
-          )}
+        <div className="text-[8px] text-zinc-500 bg-zinc-800/50 rounded p-1">
+          Requiere login
         </div>
       ) : (
-        <div className="text-[10px] text-zinc-500">
-          {isLoading ? 'Cargando...' : 'Sin datos'}
+        <div className="text-[8px] text-zinc-500">
+          {isLoading ? '...' : 'Sin datos'}
         </div>
       )}
     </div>

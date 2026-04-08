@@ -21,20 +21,20 @@ export default function ProgressBar({
   return (
     <div className="w-full">
       {(label || showFraction) && (
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between mb-0.5">
           {label && (
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
+            <span className="text-[8px] text-zinc-500 uppercase tracking-wider">
               {label}
             </span>
           )}
           {showFraction && (
-            <span className={`text-[10px] font-mono ${isLow ? 'text-red-400' : 'text-zinc-400'}`}>
-              {Math.round(percentage)}% restante
+            <span className={`text-[8px] font-mono ${isLow ? 'text-red-400' : 'text-zinc-400'}`}>
+              {Math.round(percentage)}%
             </span>
           )}
         </div>
       )}
-      <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+      <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500 ease-out"
           style={{
