@@ -98,7 +98,7 @@ function createScraperWindow(service: string, url: string): BrowserWindow {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      partition: 'persist:scraper',
+      partition: `persist:scraper-${service}`,
     },
   })
   win.webContents.setUserAgent(
@@ -135,7 +135,7 @@ const SERVICE_CONTENT_MARKER: Record<string, string> = {
   openai: 'restante',
   claude: 'usado',
   github: 'Premium requests',
-  windsurf: 'Total credits used',
+  windsurf: 'lines written',
 }
 
 async function scrapeService(service: string): Promise<ServiceData | null> {
@@ -281,19 +281,28 @@ function getWindsurfScript(): string {
     '    var t = document.body ? document.body.innerText : "";',
     '    var result = { pageTitle: document.title, bodyPreview: t.substring(0, 3000) };',
     '',
+    '    // "62,930 lines written by Cascade" — number is right before the phrase',
+    '    var li = t.indexOf("lines written by");',
+    '    if (li >= 0) {',
+    '      var before = t.substring(Math.max(0, li - 40), li).trim();',
+    '      var m = before.match(/([\\d,\\.]+)\\s*$/);',
+    '      if (m) result.linesWritten = parseInt(m[1].replace(/[,\\.]/g, ""));',
+    '    }',
+    '',
+    '    // "Total credits used" — appears on non-enterprise accounts',
     '    var ci = t.indexOf("Total credits used");',
     '    if (ci >= 0) {',
     '      var after = t.substring(ci + 18, ci + 80);',
-    '      var m = after.match(/(\\d[\\d,]*)/);',
-    '      if (m) result.creditsUsed = parseInt(m[1].replace(/,/g, ""));',
+    '      var m2 = after.match(/([\\d,]+)/);',
+    '      if (m2) result.creditsUsed = parseInt(m2[1].replace(/,/g, ""));',
     '    }',
     '',
-    '    var li = t.indexOf("lines written by");',
-    '    if (li >= 0) {',
-    '      var before = t.substring(Math.max(0, li - 40), li);',
-    '      var m2 = before.match(/(\\d[\\d.,]*)/g);',
-    '      if (m2 && m2.length > 0) {',
-    '        result.linesWritten = parseInt(m2[m2.length - 1].replace(/[.,]/g, ""));',
+    '    // Generic credits patterns for manage-plan page',
+    '    if (result.creditsUsed == null) {',
+    '      var mp = t.match(/([\\d,\\.]+)\\s*\\/\\s*([\\d,\\.]+)\\s*credits?/i);',
+    '      if (mp) {',
+    '        result.creditsUsed  = parseFloat(mp[1].replace(/,/g, ""));',
+    '        result.creditsLimit = parseFloat(mp[2].replace(/,/g, ""));',
     '      }',
     '    }',
     '',
@@ -389,7 +398,7 @@ const LOGIN_URLS: Record<string, string> = {
   openai: 'https://chatgpt.com',
   claude: 'https://claude.ai',
   github: 'https://github.com/login',
-  windsurf: 'https://windsurf.com/login',
+  windsurf: 'https://windsurf.com/account/login',
 }
 
 ipcMain.handle('open-service-login', async (_event, service: string) => {
@@ -398,14 +407,14 @@ ipcMain.handle('open-service-login', async (_event, service: string) => {
 
   log(`Opening login window for ${service}: ${loginUrl}`)
 
-  // Always create a fresh login window (separate from scraper windows)
+  // Always create a fresh login window — same partition as the scraper for this service
   const loginWin = new BrowserWindow({
     width: 1000,
     height: 750,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      partition: 'persist:scraper',
+      partition: `persist:scraper-${service}`,
     },
   })
   loginWin.webContents.setUserAgent(
@@ -440,13 +449,13 @@ ipcMain.handle('logout-service', async (_event, service: string) => {
   }
   const domain = domains[service]
   if (domain) {
-    const ses = session.fromPartition('persist:scraper')
+    const ses = session.fromPartition(`persist:scraper-${service}`)
     await ses.clearStorageData({
       origin: `https://${domain}`,
       storages: ['cookies', 'localstorage', 'sessionstorage', 'indexdb', 'websql', 'cachestorage'],
     }).catch(() => {})
     // Also remove cookies by domain directly
-    const cookies = await ses.cookies.get({ domain })
+    const cookies = await ses.cookies.get({ domain: `.${domain}` }).catch(() => [] as Electron.Cookie[])
     for (const cookie of cookies) {
       const url = `https://${cookie.domain?.replace(/^\./, '')}${cookie.path || '/'}`
       await ses.cookies.remove(url, cookie.name).catch(() => {})

@@ -113,8 +113,10 @@ export default function ServiceCard({
     data.weeklyUsage == null &&
     data.premiumRequests == null &&
     data.tokensUsed == null &&
-    data.creditsUsed == null
-  const needsLogin = hasError || hasNoData
+    data.creditsUsed == null &&
+    data.linesWritten == null
+  // Show login when: no data yet (and not loading), scrape errored, or scrape returned empty
+  const needsLogin = !isLoading && (!data || hasError || hasNoData)
 
   return (
     <div className="bg-[#22232d] rounded p-1.5 border border-zinc-800/50 hover:border-zinc-700/50 transition-colors">
@@ -164,13 +166,11 @@ export default function ServiceCard({
         <div className="space-y-1">
           {renderServiceBars(service, data, config.color)}
         </div>
-      ) : data && (hasError || hasNoData) ? (
+      ) : isLoading ? (
+        <div className="text-[8px] text-zinc-500">...</div>
+      ) : (
         <div className="text-[8px] text-zinc-500 bg-zinc-800/50 rounded p-1">
           Requiere login
-        </div>
-      ) : (
-        <div className="text-[8px] text-zinc-500">
-          {isLoading ? '...' : 'Sin datos'}
         </div>
       )}
     </div>

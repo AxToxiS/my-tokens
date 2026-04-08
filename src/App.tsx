@@ -43,7 +43,10 @@ export default function App() {
     setLoadingServices((prev) => new Set(prev).add(service))
     try {
       const data = await window.electronAPI.scrapeService(service)
-      setServiceData((prev) => ({ ...prev, [service]: data }))
+      // Don't overwrite existing data with null (happens when a concurrent scrape is skipped)
+      if (data !== null) {
+        setServiceData((prev) => ({ ...prev, [service]: data }))
+      }
     } catch (err) {
       console.error(`Error refreshing ${service}:`, err)
     } finally {
