@@ -402,6 +402,7 @@ function startAutoRefresh() {
     setTimeout(() => {
       setInterval(async () => {
         if (!mainWindow || mainWindow.isDestroyed()) return
+        log(`Auto-refresh: ${service}`)
         const result = await scrapeService(service)
         if (result && mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('service-data-update', result)
@@ -413,14 +414,15 @@ function startAutoRefresh() {
 
 app.whenReady().then(async () => {
   createWindow()
-  // Initial scrape after window is ready
   await new Promise((r) => setTimeout(r, 1000))
-  for (const service of Object.keys(SERVICE_URLS)) {
+  // Initial parallel scrape
+  await Promise.all(Object.keys(SERVICE_URLS).map(async (service) => {
     const result = await scrapeService(service)
     if (result && mainWindow && !mainWindow.isDestroyed()) {
+      log(`Push initial data for ${service}`)
       mainWindow.webContents.send('service-data-update', result)
     }
-  }
+  }))
   startAutoRefresh()
 })
 
