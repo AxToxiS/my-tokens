@@ -1,14 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react'
 import TitleBar from './components/TitleBar'
 import ServiceCard from './components/ServiceCard'
 
 const SERVICES = ['openai', 'claude', 'github', 'windsurf']
-const REFRESH_INTERVAL = 5 * 1000 // 5 seconds
 
 export default function App() {
   const [serviceData, setServiceData] = useState<Record<string, ServiceData | null>>({})
   const [loadingServices, setLoadingServices] = useState<Set<string>>(new Set())
+  const [lastRefresh, setLastRefresh] = useState<string>('')
   const didInit = useRef(false)
+  const rootRef = useRef<HTMLDivElement>(null)
 
   const refreshService = useCallback(async (service: string) => {
     setLoadingServices((prev) => new Set(prev).add(service))
@@ -27,9 +28,8 @@ export default function App() {
   }, [])
 
   const refreshAll = useCallback(async () => {
-    for (const service of SERVICES) {
-      await refreshService(service)
-    }
+    await Promise.all(SERVICES.map((s) => refreshService(s)))
+    setLastRefresh(new Date().toLocaleTimeString())
   }, [refreshService])
 
   const handleLogin = useCallback(async (service: string) => {
@@ -44,21 +44,33 @@ export default function App() {
     })
   }, [refreshService])
 
-  // Initial load + periodic refresh (guard against StrictMode double-call)
+  // Listen for push updates from main process
   useEffect(() => {
     if (didInit.current) return
     didInit.current = true
-    refreshAll()
-    const interval = setInterval(refreshAll, REFRESH_INTERVAL)
-    return () => clearInterval(interval)
-  }, [refreshAll])
+    window.electronAPI.onServiceDataUpdate((data: ServiceData) => {
+      setServiceData((prev) => ({ ...prev, [data.service]: data }))
+      setLastRefresh(new Date().toLocaleTimeString())
+    })
+  }, [])
+
+  // Resize Electron window to match content
+  useLayoutEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => {
+      window.electronAPI.resizeWindow(el.scrollHeight)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   return (
-    <div className="w-full h-screen bg-[#1a1b23] rounded-lg overflow-hidden flex flex-col border border-zinc-800/50">
+    <div ref={rootRef} className="w-full bg-[#1a1b23] rounded-lg overflow-hidden flex flex-col border border-zinc-800/50">
       <TitleBar />
 
       {/* Main content */}
-      <div className="flex-1 overflow-y-auto p-1 space-y-1">
+      <div className="flex-1 p-1 space-y-1">
         {SERVICES.map((service) => (
           <ServiceCard
             key={service}
@@ -72,9 +84,12 @@ export default function App() {
       </div>
 
       {/* Footer */}
-      <div className="px-2 py-1 bg-[#1a1b23] border-t border-zinc-800/50 flex items-center justify-end">
+      <div className="px-2 py-1 bg-[#1a1b23] border-t border-zinc-800/50 flex items-center justify-between">
         <span className="text-[8px] text-zinc-600">
-          auto-refresh: 5s
+          {lastRefresh ? `Último: ${lastRefresh}` : '...'}
+        </span>
+        <span className="text-[8px] text-zinc-600">
+          auto: 5s
         </span>
       </div>
     </div>

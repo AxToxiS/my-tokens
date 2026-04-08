@@ -7,7 +7,7 @@ const USE_MOCK = false // Set to true for testing with fake data
 
 let mainWindow: BrowserWindow | null = null
 const scraperWindows: Map<string, BrowserWindow> = new Map()
-const scrapingInProgress: Set<string> = new Set()
+const loadingInProgress: Set<string> = new Set()
 
 const SERVICE_URLS: Record<string, string> = {
   openai: 'https://chatgpt.com/codex/settings/usage',
@@ -114,39 +114,40 @@ async function scrapeService(service: string): Promise<ServiceData | null> {
   const url = SERVICE_URLS[service]
   if (!url) return null
 
-  // Prevent concurrent scrapes of the same service
-  if (scrapingInProgress.has(service)) {
-    log(`${service}: scrape already in progress, skipping`)
-    return null
-  }
-  scrapingInProgress.add(service)
-
   try {
     let win = scraperWindows.get(service)
-    if (!win || win.isDestroyed()) {
-      win = createScraperWindow(service, url)
-      scraperWindows.set(service, win)
-    } else {
-      win.loadURL(url)
+    const needsFullLoad = !win || win.isDestroyed()
+
+    if (needsFullLoad) {
+      // Prevent concurrent full loads of the same service
+      if (loadingInProgress.has(service)) {
+        log(`${service}: full load already in progress, skipping`)
+        return null
+      }
+      loadingInProgress.add(service)
+      try {
+        win = createScraperWindow(service, url)
+        scraperWindows.set(service, win)
+        await waitForLoad(win)
+        await new Promise((r) => setTimeout(r, 3000))
+
+        const finalUrl = win.webContents.getURL()
+        log(`${service}: target=${url}, landed=${finalUrl}`)
+
+        if (!finalUrl.includes(new URL(url).pathname)) {
+          log(`${service}: redirected, retrying navigation to ${url}`)
+          win.loadURL(url)
+          await waitForLoad(win)
+          await new Promise((r) => setTimeout(r, 3000))
+          log(`${service}: retry landed=${win.webContents.getURL()}`)
+        }
+      } finally {
+        loadingInProgress.delete(service)
+      }
     }
 
-    await waitForLoad(win)
-    await new Promise((r) => setTimeout(r, 3000))
-
-    // Check if we got redirected away (e.g. Claude → chat, GitHub → login)
-    const finalUrl = win.webContents.getURL()
-    log(`${service}: target=${url}, landed=${finalUrl}`)
-
-    // If redirected, try navigating directly once more
-    if (!finalUrl.includes(new URL(url).pathname)) {
-      log(`${service}: redirected, retrying navigation to ${url}`)
-      win.loadURL(url)
-      await waitForLoad(win)
-      await new Promise((r) => setTimeout(r, 3000))
-      log(`${service}: retry landed=${win.webContents.getURL()}`)
-    }
-
-    const data = await win.webContents.executeJavaScript(
+    // Re-run extraction script — instant when window already loaded
+    const data = await win!.webContents.executeJavaScript(
       getScraperScript(service)
     )
 
@@ -162,8 +163,6 @@ async function scrapeService(service: string): Promise<ServiceData | null> {
       lastUpdated: Date.now(),
       error: error.message || 'Unknown error',
     }
-  } finally {
-    scrapingInProgress.delete(service)
   }
 }
 
@@ -388,7 +387,42 @@ ipcMain.on('close-window', () => {
   mainWindow?.close()
 })
 
-app.whenReady().then(createWindow)
+ipcMain.on('resize-window', (_event, height: number) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const [w] = mainWindow.getSize()
+    mainWindow.setSize(w, Math.ceil(height))
+  }
+})
+
+function startAutoRefresh() {
+  const INTERVAL = 5000
+  for (const service of Object.keys(SERVICE_URLS)) {
+    // Stagger start so they don't all hammer at once
+    const delay = Object.keys(SERVICE_URLS).indexOf(service) * 500
+    setTimeout(() => {
+      setInterval(async () => {
+        if (!mainWindow || mainWindow.isDestroyed()) return
+        const result = await scrapeService(service)
+        if (result && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('service-data-update', result)
+        }
+      }, INTERVAL)
+    }, delay)
+  }
+}
+
+app.whenReady().then(async () => {
+  createWindow()
+  // Initial scrape after window is ready
+  await new Promise((r) => setTimeout(r, 1000))
+  for (const service of Object.keys(SERVICE_URLS)) {
+    const result = await scrapeService(service)
+    if (result && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('service-data-update', result)
+    }
+  }
+  startAutoRefresh()
+})
 
 app.on('window-all-closed', () => {
   scraperWindows.forEach((win) => {
