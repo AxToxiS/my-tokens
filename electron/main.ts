@@ -51,8 +51,8 @@ function getMockData(service: string): ServiceData {
       fiveHourLimit: 100,
       weeklyUsage: 210,
       weeklyLimit: 500,
-      claudeCodeUsage: 30,
-      claudeCodeLimit: 100,
+      claudeDesignUsage: 30,
+      claudeDesignLimit: 100,
       sessionResetInMinutes: 215,
       lastUpdated: Date.now(),
     },
@@ -243,7 +243,7 @@ function getClaudeScript(): string {
     '',
     '    if (matches.length >= 1) { result.fiveHourUsage = 100 - matches[0]; result.fiveHourLimit = 100; }',
     '    if (matches.length >= 2) { result.weeklyUsage  = 100 - matches[1]; result.weeklyLimit  = 100; }',
-    '    if (matches.length >= 3) { result.claudeCodeUsage = 100 - matches[2]; result.claudeCodeLimit = 100; }',
+    '    if (matches.length >= 3) { result.claudeDesignUsage = 100 - matches[2]; result.claudeDesignLimit = 100; }',
     '',
     '    // --- Session reset countdown → minutes remaining ---',
     '    // Pattern 1: "3 h 35 min", "3 hr 35 min", "3 hours 35 minutes"',
@@ -491,8 +491,8 @@ interface ServiceData {
   fiveHourLimit?: number | null
   weeklyUsage?: number | null
   weeklyLimit?: number | null
-  claudeCodeUsage?: number | null
-  claudeCodeLimit?: number | null
+  claudeDesignUsage?: number | null
+  claudeDesignLimit?: number | null
   sessionResetInMinutes?: number | null
   lastUpdated: number
   error?: string

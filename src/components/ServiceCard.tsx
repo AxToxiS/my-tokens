@@ -39,7 +39,7 @@ function renderServiceBars(service: string, data: ServiceData, color: string) {
       )
 
     case 'claude': {
-      const hasClaudeCode = data.claudeCodeUsage != null && data.claudeCodeLimit != null
+      const hasClaudeDesign = data.claudeDesignUsage != null && data.claudeDesignLimit != null
       return (
         <div className="space-y-1">
           {data.fiveHourUsage != null && data.fiveHourLimit != null && (
@@ -55,18 +55,18 @@ function renderServiceBars(service: string, data: ServiceData, color: string) {
           {data.weeklyUsage != null && data.weeklyLimit != null && (
             <ProgressBar value={data.weeklyUsage} max={data.weeklyLimit} color={color} label="Weekly" />
           )}
-          {hasClaudeCode ? (
+          {hasClaudeDesign ? (
             <ProgressBar
-              value={data.claudeCodeUsage!}
-              max={data.claudeCodeLimit!}
+              value={data.claudeDesignUsage!}
+              max={data.claudeDesignLimit!}
               color={color}
-              label="Claude Code"
+              label="Claude Design"
             />
           ) : (
             <div className="pt-0.5">
-              <span className="text-[8px] text-zinc-500 uppercase tracking-wider block mb-0.5">Claude Code</span>
+              <span className="text-[8px] text-zinc-500 uppercase tracking-wider block mb-0.5">Claude Design</span>
               <div className="text-[8px] text-zinc-500 bg-zinc-800/50 rounded px-1 py-0.5">
-                You haven't used Claude Code yet
+                You haven't used Claude Design yet
               </div>
             </div>
           )}
@@ -92,7 +92,7 @@ export default function ServiceCard({
   const hasNoData = data && !hasError &&
     data.fiveHourUsage == null &&
     data.weeklyUsage == null &&
-    data.claudeCodeUsage == null
+    data.claudeDesignUsage == null
   // Show login when: no data yet (and not loading), scrape errored, or scrape returned empty
   const needsLogin = !isLoading && (!data || hasError || hasNoData)
 

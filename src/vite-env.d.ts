@@ -21,8 +21,8 @@ interface ServiceData {
   fiveHourLimit?: number
   weeklyUsage?: number
   weeklyLimit?: number
-  claudeCodeUsage?: number
-  claudeCodeLimit?: number
+  claudeDesignUsage?: number
+  claudeDesignLimit?: number
   sessionResetInMinutes?: number
   lastUpdated: number
   error?: string
