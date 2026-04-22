@@ -15,8 +15,10 @@ function getPeakStatus(): PeakStatus {
   const ptDate = new Date(ptString)
   const ptHour = ptDate.getHours()
 
-  // Peak hours: 05:00 - 11:00 PT
-  const isPeak = ptHour >= 5 && ptHour < 11
+  // Peak hours: weekdays 05:00–11:00 PT (officially confirmed by Anthropic, March 2026)
+  const dayOfWeek = ptDate.getDay() // 0=Sun, 6=Sat
+  const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5
+  const isPeak = isWeekday && ptHour >= 5 && ptHour < 11
 
   // Calculate next change
   let nextChangeHourPT: number
