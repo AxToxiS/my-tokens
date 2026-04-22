@@ -9,7 +9,11 @@
     "build": "tsc && vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "vite build && electron-builder"
+    "electron:build": "vite build && electron-builder",
+    "build:mac": "vite build && electron-builder --mac",
+    "build:win": "vite build && electron-builder --win",
+    "build:all": "vite build && electron-builder -mw",
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "electron-store": "^8.2.0",
@@ -34,6 +38,21 @@
     "nsis": {
       "oneClick": true,
       "allowToChangeInstallationDirectory": false
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null,
+      "darkModeSupport": true
+    },
+    "dmg": {
+      "writeUpdateInfo": false,
+      "sign": false
     }
   },
   "devDependencies": {

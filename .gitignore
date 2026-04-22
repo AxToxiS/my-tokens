@@ -4,3 +4,6 @@ dist-electron/
 .env
 *.log
 release/
+.DS_Store
+*.app
+*.dmg

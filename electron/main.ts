@@ -4,6 +4,15 @@ import path from 'path'
 // Fix cookie persistence — set explicit userData before app is ready
 app.setPath('userData', path.join(app.getPath('appData'), 'my-tokens-scraper'))
 
+// Platform-aware User-Agent for scraper windows. Some target sites serve
+// slightly different DOM for different OS clients, so we match the host OS.
+const UA_BY_PLATFORM: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  win32:  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  linux:  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+}
+const SCRAPER_USER_AGENT = UA_BY_PLATFORM[process.platform] ?? UA_BY_PLATFORM.win32!
+
 // ============ TEST MODE ============
 const USE_MOCK = false // Set to true for testing with fake data
 // ===================================
@@ -63,6 +72,7 @@ function getMockData(service: string): ServiceData {
 }
 
 function createWindow() {
+  const isMac = process.platform === 'darwin'
   mainWindow = new BrowserWindow({
     width: 260,
     height: 360,
@@ -72,6 +82,8 @@ function createWindow() {
     resizable: true,
     minimizable: true,
     skipTaskbar: false,
+    // Native macOS blur; on non-mac platforms these options are ignored.
+    ...(isMac ? { vibrancy: 'under-window' as const, visualEffectState: 'active' as const } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -101,9 +113,7 @@ function createScraperWindow(service: string, url: string): BrowserWindow {
       partition: `persist:scraper-${service}`,
     },
   })
-  win.webContents.setUserAgent(
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-  )
+  win.webContents.setUserAgent(SCRAPER_USER_AGENT)
   win.loadURL(url)
   return win
 }
@@ -417,9 +427,7 @@ ipcMain.handle('open-service-login', async (_event, service: string) => {
       partition: `persist:scraper-${service}`,
     },
   })
-  loginWin.webContents.setUserAgent(
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-  )
+  loginWin.webContents.setUserAgent(SCRAPER_USER_AGENT)
   loginWin.loadURL(loginUrl)
   loginWin.show()
 
