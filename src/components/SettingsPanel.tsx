@@ -1,8 +1,6 @@
 const ALL_SERVICES = [
   { id: 'openai', name: 'OpenAI', color: '#10b981' },
   { id: 'claude', name: 'Claude', color: '#d97706' },
-  { id: 'github', name: 'Copilot', color: '#3b82f6' },
-  { id: 'windsurf', name: 'Windsurf', color: '#a855f7' },
 ]
 
 interface SettingsPanelProps {
@@ -33,7 +31,7 @@ export default function SettingsPanel({
       {/* Transparency */}
       <div>
         <div className="flex items-center justify-between mb-0.5">
-          <span className="text-[8px] text-zinc-400 uppercase tracking-wider">Transparencia</span>
+          <span className="text-[8px] text-zinc-400 uppercase tracking-wider">Transparency</span>
           <span className="text-[8px] font-mono text-zinc-400">{Math.round(opacity * 100)}%</span>
         </div>
         <input
@@ -49,7 +47,7 @@ export default function SettingsPanel({
 
       {/* Providers */}
       <div>
-        <span className="text-[8px] text-zinc-400 uppercase tracking-wider block mb-0.5">Proveedores</span>
+        <span className="text-[8px] text-zinc-400 uppercase tracking-wider block mb-0.5">Providers</span>
         <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
           {ALL_SERVICES.map(({ id, name, color }) => (
             <label key={id} className="flex items-center gap-1 cursor-pointer group">

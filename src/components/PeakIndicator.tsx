@@ -46,7 +46,7 @@ function getPeakStatus(): PeakStatus {
     isPeak,
     label: isPeak ? 'PEAK' : 'OFF-PEAK',
     nextChangeIn,
-    nextChangeLabel: isPeak ? 'Off-peak en' : 'Peak en',
+    nextChangeLabel: isPeak ? 'Off-peak in' : 'Peak in',
   }
 }
 

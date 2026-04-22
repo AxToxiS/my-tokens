@@ -21,19 +21,13 @@ interface ServiceData {
   fiveHourLimit?: number
   weeklyUsage?: number
   weeklyLimit?: number
-  premiumRequests?: number
-  premiumRequestsLimit?: number
-  tokensUsed?: number
-  tokensLimit?: number
-  creditsUsed?: number
-  creditsLimit?: number
-  linesWritten?: number
+  claudeCodeUsage?: number
+  claudeCodeLimit?: number
+  sessionResetInMinutes?: number
   lastUpdated: number
   error?: string
   rawNumbers?: string[]
   rawPercentages?: string[]
-  progressElements?: Array<{ value: string | null; max: string | null; text: string }>
-  copilotSection?: string[]
   pageTitle?: string
   bodyPreview?: string
   [key: string]: any
@@ -42,8 +36,6 @@ interface ServiceData {
 interface AppSettings {
   refreshIntervalMinutes: number
   browser: 'chrome' | 'edge' | 'firefox'
-  githubPAT?: string
-  githubUsername?: string
   openaiPlan: 'plus' | 'pro'
   claudePlan: 'pro' | 'max5x' | 'max20x'
 }

@@ -31,7 +31,7 @@ export default function TitleBar({ settingsOpen, onSettingsToggle }: TitleBarPro
           className={`w-4 h-4 rounded flex items-center justify-center transition-colors ${
             settingsOpen || isHovered === 'settings' ? 'bg-zinc-700' : 'bg-transparent'
           }`}
-          title="Ajustes"
+          title="Settings"
         >
           <svg width="9" height="9" viewBox="0 0 14 14" fill="none">
             <path

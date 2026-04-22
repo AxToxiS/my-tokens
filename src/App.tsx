@@ -3,7 +3,7 @@ import TitleBar from './components/TitleBar'
 import ServiceCard from './components/ServiceCard'
 import SettingsPanel from './components/SettingsPanel'
 
-const ALL_SERVICES = ['openai', 'claude', 'github', 'windsurf']
+const ALL_SERVICES = ['openai', 'claude']
 
 function loadUISettings() {
   try {
@@ -123,7 +123,7 @@ export default function App() {
           >
             {/* Modal header */}
             <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-zinc-700/50">
-              <span className="text-[9px] font-semibold text-zinc-300 uppercase tracking-wider">Ajustes</span>
+              <span className="text-[9px] font-semibold text-zinc-300 uppercase tracking-wider">Settings</span>
               <button
                 onClick={() => setSettingsOpen(false)}
                 className="w-4 h-4 rounded flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700 transition-colors"
@@ -161,7 +161,7 @@ export default function App() {
       {/* Footer */}
       <div className="px-2 py-1 bg-[#1a1b23] border-t border-zinc-800/50 flex items-center justify-between">
         <span className="text-[8px] text-zinc-600">
-          {lastRefresh ? `Último: ${lastRefresh}` : '...'}
+          {lastRefresh ? `Last: ${lastRefresh}` : '...'}
         </span>
         <span className="text-[8px] text-zinc-600">
           auto: 30s

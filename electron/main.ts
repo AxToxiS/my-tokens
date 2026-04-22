@@ -24,8 +24,6 @@ const loadingInProgress: Set<string> = new Set()
 const SERVICE_URLS: Record<string, string> = {
   openai: 'https://chatgpt.com/codex/settings/usage',
   claude: 'https://claude.ai/settings/usage',
-  github: 'https://github.com/settings/copilot/features',
-  windsurf: 'https://windsurf.com/profile',
 }
 
 function log(msg: string, data?: any) {
@@ -53,18 +51,9 @@ function getMockData(service: string): ServiceData {
       fiveHourLimit: 100,
       weeklyUsage: 210,
       weeklyLimit: 500,
-      lastUpdated: Date.now(),
-    },
-    github: {
-      service: 'github',
-      premiumRequests: 187,
-      premiumRequestsLimit: 300,
-      lastUpdated: Date.now(),
-    },
-    windsurf: {
-      service: 'windsurf',
-      tokensUsed: 1250000,
-      tokensLimit: 3000000,
+      claudeCodeUsage: 30,
+      claudeCodeLimit: 100,
+      sessionResetInMinutes: 215,
       lastUpdated: Date.now(),
     },
   }
@@ -144,8 +133,6 @@ async function waitForContent(win: BrowserWindow, needle: string, timeoutMs = 12
 const SERVICE_CONTENT_MARKER: Record<string, string> = {
   openai: 'restante',
   claude: 'usado',
-  github: 'Premium requests',
-  windsurf: 'lines written',
 }
 
 async function scrapeService(service: string): Promise<ServiceData | null> {
@@ -180,10 +167,6 @@ async function scrapeService(service: string): Promise<ServiceData | null> {
         })()
       `).catch(() => {})
       await new Promise((r) => setTimeout(r, 3000))
-    } else if (service === 'windsurf') {
-      win.loadURL('https://windsurf.com/profile')
-      await waitForLoad(win)
-      await new Promise((r) => setTimeout(r, 5000))
     } else {
       win.loadURL(url)
       await waitForLoad(win)
@@ -236,86 +219,59 @@ const SHARED_SCRAPER_UTILS = `
 `;
 
 function getClaudeScript(): string {
-  // Find ALL "X% usado" or "X% used" occurrences.
-  // Claude page has exactly 2: first = session (5h), second = weekly
+  // Scrape Claude usage dashboard (claude.ai/settings/usage).
+  //
+  // The page shows up to three "X% usado" / "X% used" numbers, in order:
+  //   1. Current session   (5-hour window)
+  //   2. Weekly limit      (all models)
+  //   3. Claude Code       (only present if the user used Claude Code)
+  //
+  // It also shows a reset countdown for the current session, localized like:
+  //   "Se reinicia en 3 h 35 min" / "Resets in 3 hr 35 min" / "Resets at 4:15 PM"
+  // We convert whatever we find into total minutes remaining.
   const code = [
     '(function() {',
     '  try {',
     '    var t = document.body ? document.body.innerText : "";',
     '    var result = { pageTitle: document.title, bodyPreview: t.substring(0, 5000) };',
     '',
+    '    // --- Usage percentages (session, weekly, claude code) ---',
     '    var re = /(\\d+\\.?\\d*)\\s*%\\s*(?:usado|used)/gi;',
     '    var matches = [];',
     '    var m;',
     '    while ((m = re.exec(t)) !== null) { matches.push(parseFloat(m[1])); }',
     '',
     '    if (matches.length >= 1) { result.fiveHourUsage = 100 - matches[0]; result.fiveHourLimit = 100; }',
-    '    if (matches.length >= 2) { result.weeklyUsage = 100 - matches[1]; result.weeklyLimit = 100; }',
+    '    if (matches.length >= 2) { result.weeklyUsage  = 100 - matches[1]; result.weeklyLimit  = 100; }',
+    '    if (matches.length >= 3) { result.claudeCodeUsage = 100 - matches[2]; result.claudeCodeLimit = 100; }',
+    '',
+    '    // --- Session reset countdown → minutes remaining ---',
+    '    // Pattern 1: "3 h 35 min", "3 hr 35 min", "3 hours 35 minutes"',
+    '    var hmRe = /(\\d+)\\s*(?:h|hr|hrs|hour|hours|horas|hora)(?:\\s*(\\d+)\\s*(?:m|min|mins|minute|minutes|minutos|minuto))?/i;',
+    '    // Pattern 2: only minutes, e.g. "45 min"',
+    '    var mOnlyRe = /(\\d+)\\s*(?:m|min|mins|minute|minutes|minutos|minuto)\\b/i;',
+    '',
+    '    // Scope to the session block if we can find it to avoid matching',
+    '    // unrelated durations elsewhere on the page.',
+    '    var sessionIdx = -1;',
+    '    var sessionMarkers = ["Sesión actual", "Current session", "Se reinicia", "Resets in", "Resets at", "Se inicia"];',
+    '    for (var si = 0; si < sessionMarkers.length; si++) {',
+    '      var idx = t.indexOf(sessionMarkers[si]);',
+    '      if (idx >= 0 && (sessionIdx === -1 || idx < sessionIdx)) sessionIdx = idx;',
+    '    }',
+    '    var scope = sessionIdx >= 0 ? t.substring(sessionIdx, sessionIdx + 400) : t;',
+    '',
+    '    var hm = scope.match(hmRe);',
+    '    if (hm) {',
+    '      var hours = parseInt(hm[1], 10);',
+    '      var mins  = hm[2] ? parseInt(hm[2], 10) : 0;',
+    '      result.sessionResetInMinutes = hours * 60 + mins;',
+    '    } else {',
+    '      var only = scope.match(mOnlyRe);',
+    '      if (only) result.sessionResetInMinutes = parseInt(only[1], 10);',
+    '    }',
     '',
     '    result.debugMatches = matches;',
-    '    return result;',
-    '  } catch(e) { return { error: e.message, pageTitle: document.title }; }',
-    '})()',
-  ]
-  return code.join('\n')
-}
-
-function getGithubScript(): string {
-  const code = [
-    '(function() {',
-    '  try {',
-    '    var t = document.body ? document.body.innerText : "";',
-    '    var result = { pageTitle: document.title, bodyPreview: t.substring(0, 3000) };',
-    '',
-    '    var i = t.toLowerCase().indexOf("premium requests");',
-    '    if (i >= 0) {',
-    '      var chunk = t.substring(i, i + 200);',
-    '      var m = chunk.match(/(\\d+\\.?\\d*)\\s*%/);',
-    '      if (m) {',
-    '        result.premiumRequests = 100 - parseFloat(m[1]);',
-    '        result.premiumRequestsLimit = 100;',
-    '      }',
-    '    }',
-    '',
-    '    return result;',
-    '  } catch(e) { return { error: e.message, pageTitle: document.title }; }',
-    '})()',
-  ]
-  return code.join('\n')
-}
-
-function getWindsurfScript(): string {
-  const code = [
-    '(function() {',
-    '  try {',
-    '    var t = document.body ? document.body.innerText : "";',
-    '    var result = { pageTitle: document.title, bodyPreview: t.substring(0, 3000) };',
-    '',
-    '    // "62,930 lines written by Cascade" — number is right before the phrase',
-    '    var li = t.indexOf("lines written by");',
-    '    if (li >= 0) {',
-    '      var before = t.substring(Math.max(0, li - 40), li).trim();',
-    '      var m = before.match(/([\\d,\\.]+)\\s*$/);',
-    '      if (m) result.linesWritten = parseInt(m[1].replace(/[,\\.]/g, ""));',
-    '    }',
-    '',
-    '    // "Total credits used" — appears on non-enterprise accounts',
-    '    var ci = t.indexOf("Total credits used");',
-    '    if (ci >= 0) {',
-    '      var after = t.substring(ci + 18, ci + 80);',
-    '      var m2 = after.match(/([\\d,]+)/);',
-    '      if (m2) result.creditsUsed = parseInt(m2[1].replace(/,/g, ""));',
-    '    }',
-    '',
-    '    // Generic credits patterns for manage-plan page',
-    '    if (result.creditsUsed == null) {',
-    '      var mp = t.match(/([\\d,\\.]+)\\s*\\/\\s*([\\d,\\.]+)\\s*credits?/i);',
-    '      if (mp) {',
-    '        result.creditsUsed  = parseFloat(mp[1].replace(/,/g, ""));',
-    '        result.creditsLimit = parseFloat(mp[2].replace(/,/g, ""));',
-    '      }',
-    '    }',
-    '',
     '    return result;',
     '  } catch(e) { return { error: e.message, pageTitle: document.title }; }',
     '})()',
@@ -363,15 +319,6 @@ function getScraperScript(service: string): string {
       // Real DOM text: "Sesión actual\n\nSe inicia...\n\n0% usado\n\nLímites semanales\n...\nTodos los modelos\n\n...\n\n15% usado"
       return getClaudeScript()
 
-    case 'github':
-      // github.com/settings/copilot/features
-      // Real DOM text: "Premium requests\n1.7%"
-      return getGithubScript()
-
-    case 'windsurf':
-      // windsurf.com/profile — "Total credits used\n\n1099"
-      return getWindsurfScript()
-
     default:
       return `(function() { return { error: 'Unknown service' } })()`
   }
@@ -407,8 +354,6 @@ ipcMain.handle('scrape-all-services', async () => {
 const LOGIN_URLS: Record<string, string> = {
   openai: 'https://chatgpt.com',
   claude: 'https://claude.ai',
-  github: 'https://github.com/login',
-  windsurf: 'https://windsurf.com/account/login',
 }
 
 ipcMain.handle('open-service-login', async (_event, service: string) => {
@@ -452,8 +397,6 @@ ipcMain.handle('logout-service', async (_event, service: string) => {
   const domains: Record<string, string> = {
     openai: 'chatgpt.com',
     claude: 'claude.ai',
-    github: 'github.com',
-    windsurf: 'windsurf.com',
   }
   const domain = domains[service]
   if (domain) {
@@ -548,12 +491,9 @@ interface ServiceData {
   fiveHourLimit?: number | null
   weeklyUsage?: number | null
   weeklyLimit?: number | null
-  premiumRequests?: number | null
-  premiumRequestsLimit?: number | null
-  tokensUsed?: number | null
-  tokensLimit?: number | null
-  creditsUsed?: number | null
-  creditsLimit?: number | null
+  claudeCodeUsage?: number | null
+  claudeCodeLimit?: number | null
+  sessionResetInMinutes?: number | null
   lastUpdated: number
   error?: string
   [key: string]: any

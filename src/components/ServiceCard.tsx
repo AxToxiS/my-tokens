@@ -13,14 +13,15 @@ interface ServiceCardProps {
 const SERVICE_CONFIG: Record<string, { name: string; color: string; icon: string }> = {
   openai: { name: 'OpenAI', color: '#10b981', icon: '◆' },
   claude: { name: 'Claude', color: '#d97706', icon: '◈' },
-  github: { name: 'Copilot', color: '#3b82f6', icon: '◉' },
-  windsurf: { name: 'Windsurf', color: '#a855f7', icon: '◎' },
 }
 
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`
-  return n.toString()
+function formatResetTime(minutes: number): string {
+  if (minutes <= 0) return 'Resets soon'
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h > 0 && m > 0) return `Resets in ${h} hr ${m} min`
+  if (h > 0) return `Resets in ${h} hr`
+  return `Resets in ${m} min`
 }
 
 function renderServiceBars(service: string, data: ServiceData, color: string) {
@@ -29,64 +30,44 @@ function renderServiceBars(service: string, data: ServiceData, color: string) {
       return (
         <div className="space-y-1">
           {data.fiveHourUsage != null && data.fiveHourLimit != null && (
-            <ProgressBar value={data.fiveHourUsage} max={data.fiveHourLimit} color={color} label="5 horas" />
+            <ProgressBar value={data.fiveHourUsage} max={data.fiveHourLimit} color={color} label="5 hours" />
           )}
           {data.weeklyUsage != null && data.weeklyLimit != null && (
-            <ProgressBar value={data.weeklyUsage} max={data.weeklyLimit} color={color} label="Semanal" />
+            <ProgressBar value={data.weeklyUsage} max={data.weeklyLimit} color={color} label="Weekly" />
           )}
         </div>
       )
 
-    case 'claude':
+    case 'claude': {
+      const hasClaudeCode = data.claudeCodeUsage != null && data.claudeCodeLimit != null
       return (
         <div className="space-y-1">
           {data.fiveHourUsage != null && data.fiveHourLimit != null && (
-            <ProgressBar value={data.fiveHourUsage} max={data.fiveHourLimit} color={color} label="Sesión" />
-          )}
-          {data.weeklyUsage != null && data.weeklyLimit != null && (
-            <ProgressBar value={data.weeklyUsage} max={data.weeklyLimit} color={color} label="Semanal" />
-          )}
-        </div>
-      )
-
-    case 'github': {
-      // GitHub: premiumRequests = remaining % (already 100 - used%)
-      return (
-        <div className="space-y-1">
-          {data.premiumRequests != null && data.premiumRequestsLimit != null && (
-            <ProgressBar
-              value={data.premiumRequests}
-              max={data.premiumRequestsLimit}
-              color={color}
-              label="Premium requests"
-            />
-          )}
-        </div>
-      )
-    }
-
-    case 'windsurf': {
-      // Windsurf Enterprise: shows total credits used (no limit available)
-      return (
-        <div className="space-y-1">
-          {data.creditsUsed != null && (
-            <div className="flex items-center justify-between">
-              <span className="text-[8px] text-zinc-500 uppercase tracking-wider">
-                Créditos
-              </span>
-              <span className="text-[8px] font-mono text-zinc-300">
-                {data.creditsUsed.toLocaleString()}
-              </span>
+            <div>
+              <ProgressBar value={data.fiveHourUsage} max={data.fiveHourLimit} color={color} label="Session" />
+              {data.sessionResetInMinutes != null && (
+                <div className="text-[7px] text-zinc-500 mt-0.5">
+                  {formatResetTime(data.sessionResetInMinutes)}
+                </div>
+              )}
             </div>
           )}
-          {data.linesWritten != null && (
-            <div className="flex items-center justify-between">
-              <span className="text-[8px] text-zinc-500 uppercase tracking-wider">
-                Líneas Cascade
-              </span>
-              <span className="text-[8px] font-mono text-zinc-400">
-                {data.linesWritten.toLocaleString()}
-              </span>
+          {data.weeklyUsage != null && data.weeklyLimit != null && (
+            <ProgressBar value={data.weeklyUsage} max={data.weeklyLimit} color={color} label="Weekly" />
+          )}
+          {hasClaudeCode ? (
+            <ProgressBar
+              value={data.claudeCodeUsage!}
+              max={data.claudeCodeLimit!}
+              color={color}
+              label="Claude Code"
+            />
+          ) : (
+            <div className="pt-0.5">
+              <span className="text-[8px] text-zinc-500 uppercase tracking-wider block mb-0.5">Claude Code</span>
+              <div className="text-[8px] text-zinc-500 bg-zinc-800/50 rounded px-1 py-0.5">
+                You haven't used Claude Code yet
+              </div>
             </div>
           )}
         </div>
@@ -111,10 +92,7 @@ export default function ServiceCard({
   const hasNoData = data && !hasError &&
     data.fiveHourUsage == null &&
     data.weeklyUsage == null &&
-    data.premiumRequests == null &&
-    data.tokensUsed == null &&
-    data.creditsUsed == null &&
-    data.linesWritten == null
+    data.claudeCodeUsage == null
   // Show login when: no data yet (and not loading), scrape errored, or scrape returned empty
   const needsLogin = !isLoading && (!data || hasError || hasNoData)
 
@@ -142,7 +120,7 @@ export default function ServiceCard({
           ) : data && !hasError ? (
             <button
               onClick={onLogout}
-              title="Cerrar sesión"
+              title="Sign out"
               className="w-4 h-4 rounded flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-zinc-700 transition-colors"
             >
               <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
@@ -170,7 +148,7 @@ export default function ServiceCard({
         <div className="text-[8px] text-zinc-500">...</div>
       ) : (
         <div className="text-[8px] text-zinc-500 bg-zinc-800/50 rounded p-1">
-          Requiere login
+          Requires login
         </div>
       )}
     </div>
